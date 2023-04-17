@@ -27,71 +27,71 @@ use crate::mongo::MongoClient;
 #[command(author, version, about, long_about = None)]
 pub struct Args {
     /// Port to listen on
-    #[arg(short, long, default_value_t = 8080, env = "METRICS_PORT")]
+    #[arg(short = 'l', long, default_value_t = 8080, env = "METRICS_PORT")]
     port: u16,
 
     /// Kafka Brokers
-    #[arg(short, long, env = "KAFKA_BROKER_ENDPOINT")]
+    #[arg(short = 'b', long, env = "KAFKA_BROKER_ENDPOINT")]
     broker_endpoint: String,
 
     /// Kafka main topic
-    #[arg(short, long, env = "KAFKA_TOPIC")]
+    #[arg(short = 't', long, env = "KAFKA_TOPIC")]
     topic: String,
 
     /// Kafka dlq topic
-    #[arg(short, long, env = "KAFKA_TOPIC_DLQ")]
+    #[arg(short = 'd', long, env = "KAFKA_TOPIC_DLQ")]
     topic_dlq: String,
 
     /// Kafka group id
-    #[arg(short, long, env = "KAFKA_GROUP_ID")]
+    #[arg(short = 'g', long, env = "KAFKA_GROUP_ID")]
     group_id: String,
 
     /// Kafka username
-    #[arg(short, long, env = "KAFKA_BROKER_USERNAME")]
+    #[arg(short = 'k', long, env = "KAFKA_BROKER_USERNAME")]
     kafka_username: String,
 
     /// Kafka password
-    #[arg(short, long, env = "KAFKA_BROKER_PASSWORD")]
+    #[arg(short = 'p', long, env = "KAFKA_BROKER_PASSWORD")]
     kafka_password: String,
 
     /// Kafka security protocol
-    #[arg(short, long, env = "KAFKA_BROKER_SECURITY_PROTOCOL")]
+    #[arg(short = 'S', long, env = "KAFKA_BROKER_SECURITY_PROTOCOL")]
     kafka_security_protocol: String,
 
     /// Kafka SASL mechanism
-    #[arg(short, long, env = "KAFKA_BROKER_SASL_MECHANISM")]
+    #[arg(short = 'M', long, env = "KAFKA_BROKER_SASL_MECHANISM")]
     kafka_sasl_mechanism: String,
 
     /// Kafka schema endpoint
-    #[arg(short, long, env = "KAFKA_SCHEMA_REGISTRY_ENDPOINT")]
+    #[arg(short = 'r', long, env = "KAFKA_SCHEMA_REGISTRY_ENDPOINT")]
     schema_registry_endpoint: String,
 
     /// Kafka schema username
-    #[arg(short, long, env = "KAFKA_SCHEMA_REGISTRY_API_KEY")]
+    #[arg(short = 'a', long, env = "KAFKA_SCHEMA_REGISTRY_API_KEY")]
     schema_registry_api_key: String,
 
     /// Kafka schema password
-    #[arg(short, long, env = "KAFKA_SCHEMA_REGISTRY_API_SECRET")]
+    #[arg(short = 's', long, env = "KAFKA_SCHEMA_REGISTRY_API_SECRET")]
     schema_registry_api_secret: String,
 
     /// MongoDB Username
-    #[arg(short, long, env = "MONGODB_USERNAME")]
+    #[arg(short = 'U', long, env = "MONGODB_USERNAME")]
     mongodb_username: String,
 
     /// MongoDB Password
-    #[arg(short, long, env = "MONGODB_PASSWORD")]
+    #[arg(short = 'P', long, env = "MONGODB_PASSWORD")]
     mongodb_password: String,
 
     /// MongoDB URI
-    #[arg(short, long, env = "MONGODB_URI")]
+    #[arg(short = 'R', long, env = "MONGODB_URI")]
     mongodb_uri: String,
 
     /// MongoDB Database
-    #[arg(short, long, env = "MONGODB_DATABASE")]
+    #[arg(short = 'm', long, env = "MONGODB_DATABASE")]
     mongodb_database: String,
 
     /// MongoDB Collection
-    #[arg(short, long, env = "MONGODB_COLLECTION")]
+    #[arg(short = 'c', long, env = "MONGODB_COLLECTION")]
     mongodb_collection: String,
 }
 
@@ -150,6 +150,13 @@ async fn consume(
                             // Commit to the offset store. Offsets are committed back to kafka at regular intervals
                             if let Err(e) = client.consumer.store_offset_from_message(&m) {
                                 log::warn!("\"Error while storing offset: {}\"", e);
+                                metrics::increment_counter!(
+                                    "mongodb_sink_connector_offsets_stored_errors"
+                                );
+                            } else {
+                                metrics::increment_counter!(
+                                    "mongodb_sink_connector_offsets_stored"
+                                );
                             }
                         }
                         Err(e) => {

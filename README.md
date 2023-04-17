@@ -1,5 +1,7 @@
 # mongodb-sink-consumer-rs
 
+Kafka consumer whos sole purpose is to sink messages into a MongoDB collection.
+
 ### Usage
 
 ```

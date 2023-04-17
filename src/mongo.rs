@@ -59,10 +59,12 @@ impl MongoClient {
         match collection.insert_one(doc, None).await {
             Ok(id) => {
                 log::info!("\"Inserted doc with id: {}\"", id.inserted_id);
+                metrics::increment_counter!("mongodb_sink_connector_mongodb_inserts");
                 Ok(())
             }
             Err(e) => {
                 log::error!("\"Error inserting into mongodb: {}\"", e);
+                metrics::increment_counter!("mongodb_sink_connector_mongodb_insert_errors");
                 return Err(e)?;
             }
         }

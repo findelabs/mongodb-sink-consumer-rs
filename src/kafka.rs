@@ -40,16 +40,24 @@ impl ClientContext for CustomContext {}
 impl ConsumerContext for CustomContext {
     fn pre_rebalance(&self, rebalance: &Rebalance) {
         info!("\"Pre-rebalance {:?}\"", rebalance);
+        metrics::gauge!("mongodb_sink_connector_balanced", 0f64);
     }
 
     fn post_rebalance(&self, rebalance: &Rebalance) {
         info!("\"Post-rebalance {:?}\"", rebalance);
+        metrics::gauge!("mongodb_sink_connector_balanced", 1f64);
     }
 
     fn commit_callback(&self, result: KafkaResult<()>, _offsets: &TopicPartitionList) {
         match result {
-            Ok(_) => log::debug!("\"Offsets committed successfully\""),
-            Err(e) => log::warn!("\"Error while committing offsets: {}\"", e),
+            Ok(_) => {
+                log::debug!("\"Offsets committed successfully\"");
+                metrics::increment_counter!("mongodb_sink_connector_offsets_committed");
+            }
+            Err(e) => {
+                log::warn!("\"Error while committing offsets: {}\"", e);
+                metrics::increment_counter!("mongodb_sink_connector_offset_commit_errors");
+            }
         };
     }
 }
@@ -72,6 +80,7 @@ pub async fn decode(
         },
         Err(e) => {
             warn!("\"Error while deserializing message payload: {:?}\"", e);
+            metrics::increment_counter!("mongodb_sink_connector_deserializing_errors");
             Err(e)?
         }
     }
@@ -120,8 +129,14 @@ pub async fn dlq_produce(
 
     // This will be executed when the result is received.
     match delivery_status {
-        Ok(_) => log::warn!("\"Saved message to dlq: {}\"", topic),
-        Err(e) => log::warn!("\"Unable to commit message to dlq! {}\"", e.0),
+        Ok(_) => {
+            log::warn!("\"Saved message to dlq: {}\"", topic);
+            metrics::increment_counter!("mongodb_sink_connector_dead_letter_commits");
+        }
+        Err(e) => {
+            log::warn!("\"Unable to commit message to dlq! {}\"", e.0);
+            metrics::increment_counter!("mongodb_sink_connector_dead_letter_commit_errors");
+        }
     }
 }
 

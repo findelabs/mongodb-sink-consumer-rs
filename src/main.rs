@@ -1,15 +1,21 @@
+use axum::routing::get;
+use axum::Router;
 use bson::to_document;
 use chrono::Local;
 use clap::Parser;
 use env_logger::{Builder, Target};
 use log::LevelFilter;
+use std::future::ready;
 use std::io::Write;
+use std::net::SocketAddr;
+use tokio::task;
 
 use rdkafka::consumer::Consumer;
 use rdkafka::message::{Headers, Message};
 use rdkafka::util::get_rdkafka_version;
 
 mod error;
+mod exporter;
 mod kafka;
 mod mongo;
 
@@ -20,6 +26,10 @@ use crate::mongo::MongoClient;
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
+    /// Port to listen on
+    #[arg(short, long, default_value_t = 8080, env = "METRICS_PORT")]
+    port: u16,
+
     /// Kafka Brokers
     #[arg(short, long, env = "KAFKA_BROKER_ENDPOINT")]
     broker_endpoint: String,
@@ -94,6 +104,8 @@ async fn consume(
         match client.consumer.recv().await {
             Err(e) => log::warn!("Kafka error: {}", e),
             Ok(m) => {
+                metrics::increment_counter!("mongodb_sink_connector_topic_message_recv");
+
                 // Convert message from JSON with schema registry
                 let payload = match kafka::decode(client.decoder.clone(), m.payload()).await {
                     Ok(p) => p,
@@ -178,6 +190,9 @@ async fn main() -> Result<(), RestError> {
         .parse_default_env()
         .init();
 
+    // Create prometheus handle
+    let recorder_handle = exporter::setup_metrics_recorder();
+
     let (version_n, version_s) = get_rdkafka_version();
     log::info!("\"rd_kafka_version: 0x{:08x}, {}\"", version_n, version_s);
 
@@ -193,5 +208,21 @@ async fn main() -> Result<(), RestError> {
         .subscribe(&[&args.topic])
         .expect("Can't subscribe to specified topic");
 
+    // Create listener for /metrics
+    let app = Router::new().route("/metrics", get(move || ready(recorder_handle.render())));
+
+    // Serve metrics
+    let addr = SocketAddr::from(([0, 0, 0, 0], args.port as u16));
+    log::info!("\"Listening on {}\"", addr);
+    task::spawn(async move {
+        if let Err(e) = axum::Server::bind(&addr)
+            .serve(app.into_make_service())
+            .await
+        {
+            log::error!("\"Caught metrics error on listener: {}\"", e);
+        };
+    });
+
+    // Consume from topic
     consume(kafka_client, db, args.topic_dlq).await
 }

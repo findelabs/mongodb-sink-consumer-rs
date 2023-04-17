@@ -7,6 +7,7 @@ pub enum Error {
     DeError(bson::de::Error),
     SerError(bson::ser::Error),
     SRCError(schema_registry_converter::error::SRCError),
+    Hyper(hyper::Error),
 }
 
 impl std::error::Error for Error {}
@@ -19,6 +20,7 @@ impl fmt::Display for Error {
             Error::DeError(ref err) => write!(f, "{{\"error\": \"{}\"}}", err),
             Error::SerError(ref err) => write!(f, "{{\"error\": \"{}\"}}", err),
             Error::SRCError(ref err) => write!(f, "{{\"error\": \"{}\"}}", err),
+            Error::Hyper(ref err) => write!(f, "{{\"error\": \"{}\"}}", err),
         }
     }
 }
@@ -50,5 +52,11 @@ impl From<mongodb::error::Error> for Error {
 impl From<schema_registry_converter::error::SRCError> for Error {
     fn from(err: schema_registry_converter::error::SRCError) -> Error {
         Error::SRCError(err)
+    }
+}
+
+impl From<hyper::Error> for Error {
+    fn from(err: hyper::Error) -> Error {
+        Error::Hyper(err)
     }
 }
